@@ -28,6 +28,8 @@ load_dotenv(SCRIPT_DIR / ".env")
 
 VOYAGE_API_KEY = os.getenv("VOYAGE_API_KEY")
 COHERE_API_KEY = os.getenv("COHERE_API_KEY")
+QDRANT_URL = os.getenv("QDRANT_URL")
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 QDRANT_PATH = str(SCRIPT_DIR / "qdrant_storage")
 COLLECTION_NAME = "livekit_kb"
 VECTOR_SIZE = 512
@@ -43,10 +45,13 @@ _cohere_client = None
 
 
 def get_qdrant_client():
-    """Lazy-load Qdrant client."""
+    """Lazy-load Qdrant client (remote if QDRANT_URL is set, else local disk)."""
     global _qdrant_client
     if _qdrant_client is None:
-        _qdrant_client = QdrantClient(path=QDRANT_PATH)
+        if QDRANT_URL:
+            _qdrant_client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+        else:
+            _qdrant_client = QdrantClient(path=QDRANT_PATH)
     return _qdrant_client
 
 
@@ -351,7 +356,10 @@ async def ingest_urls(request: Request) -> JSONResponse:
 
 if __name__ == "__main__":
     print(f"[mcp] Starting server on 0.0.0.0:{PORT}", flush=True)
-    print(f"[mcp] Qdrant path: {QDRANT_PATH}", flush=True)
+    if QDRANT_URL:
+        print(f"[mcp] Qdrant: remote ({QDRANT_URL})", flush=True)
+    else:
+        print(f"[mcp] Qdrant: local ({QDRANT_PATH})", flush=True)
     print(f"[mcp] VOYAGE_API_KEY set: {bool(VOYAGE_API_KEY)}", flush=True)
     print(f"[mcp] COHERE_API_KEY set: {bool(COHERE_API_KEY)}", flush=True)
     mcp.run(transport="streamable-http")
