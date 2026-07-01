@@ -18,6 +18,8 @@ import cohere
 import voyageai
 from qdrant_client import QdrantClient
 from qdrant_client.models import PointStruct, Filter, FieldCondition, MatchValue
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 from mcp.server.fastmcp import FastMCP
 
 # Resolve paths relative to this script's location
@@ -231,8 +233,8 @@ def livekit_kb_stats() -> dict:
         return {"error": str(e)}
 
 
-@mcp.http_handler("POST", "/ingest")
-async def ingest_urls(request) -> dict:
+@mcp.custom_route("/ingest", methods=["POST"])
+async def ingest_urls(request: Request) -> JSONResponse:
     """Ingest documents from URLs into the knowledge base.
     
     Request body:
@@ -247,13 +249,13 @@ async def ingest_urls(request) -> dict:
         source_type = body.get("source_type", "docs")
         
         if not urls:
-            return {"error": "No URLs provided"}
+            return JSONResponse({"error": "No URLs provided"})
         
         if not isinstance(urls, list):
-            return {"error": "urls must be a list"}
+            return JSONResponse({"error": "urls must be a list"})
         
         if source_type not in ("docs", "forum", "vapi_book"):
-            return {"error": f"Invalid source_type '{source_type}'"}
+            return JSONResponse({"error": f"Invalid source_type '{source_type}'"})
         
         qdrant = get_qdrant_client()
         voyage = get_voyage_client()
@@ -312,15 +314,15 @@ async def ingest_urls(request) -> dict:
                 print(f"[ingest] ✗ {error_msg}", file=sys.stderr, flush=True)
                 errors.append(error_msg)
         
-        return {
+        return JSONResponse({
             "status": "success",
             "ingested_count": ingested_count,
             "urls_processed": len(urls),
             "errors": errors if errors else None,
-        }
+        })
     
     except Exception as e:
-        return {"error": f"Ingest failed: {str(e)}"}
+        return JSONResponse({"error": f"Ingest failed: {str(e)}"})
 
 
 if __name__ == "__main__":
