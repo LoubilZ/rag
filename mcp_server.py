@@ -66,7 +66,7 @@ def get_cohere_client():
     if _cohere_client is None:
         if not COHERE_API_KEY:
             raise ValueError("COHERE_API_KEY environment variable not set")
-        _cohere_client = cohere.ClientV2(api_key=COHERE_API_KEY)
+        _cohere_client = cohere.Client(api_key=COHERE_API_KEY)
     return _cohere_client
 
 
