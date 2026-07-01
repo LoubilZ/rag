@@ -125,6 +125,21 @@ def get_cohere_client() -> cohere.Client:
     return _cohere_client
 
 
+def ensure_payload_indexes(qdrant: QdrantClient) -> None:
+    """Create keyword indexes for filterable payload fields (safe, idempotent)."""
+    for field in ("source_type", "category", "architecture"):
+        try:
+            qdrant.create_payload_index(
+                collection_name=COLLECTION_NAME,
+                field_name=field,
+                field_schema="keyword",
+            )
+        except Exception as exc:
+            msg = str(exc).lower()
+            if "already exists" not in msg and "already indexed" not in msg:
+                print(f"[qdrant] payload index '{field}': {exc}", file=sys.stderr)
+
+
 def ensure_collection(qdrant: QdrantClient) -> None:
     """Create the collection if missing. Never delete or recreate existing data."""
     try:
@@ -135,7 +150,6 @@ def ensure_collection(qdrant: QdrantClient) -> None:
                 f"Collection '{COLLECTION_NAME}' has vector size {current_size}, "
                 f"expected {VECTOR_SIZE}. Fix manually; auto-recreate is disabled."
             )
-        return
     except ValueError:
         raise
     except Exception:
@@ -143,6 +157,7 @@ def ensure_collection(qdrant: QdrantClient) -> None:
             collection_name=COLLECTION_NAME,
             vectors_config={"size": VECTOR_SIZE, "distance": "Cosine"},
         )
+    ensure_payload_indexes(qdrant)
 
 
 def chunk_text(
@@ -426,6 +441,8 @@ def search_livekit_kb(
             qdrant.get_collection(COLLECTION_NAME)
         except Exception as e:
             return _err(f"Collection '{COLLECTION_NAME}' not found. Run ingest first. ({e})")
+
+        ensure_payload_indexes(qdrant)
 
         query_embedding = voyage.embed(
             [query],
