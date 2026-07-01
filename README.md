@@ -1,8 +1,38 @@
 # LiveKit RAG MCP Server
 
-Serveur MCP qui expose une base de connaissances LiveKit (docs, forum, Vapi Playbook) via recherche vectorielle + reranking Cohere.
+Serveur MCP (RAG-Voice Agent) : base de connaissances sur les agents vocaux, recherche vectorielle (Voyage 512d) + reranking Cohere, stockage Qdrant.
 
 **Production :** https://livekit-rag-production.up.railway.app
+
+## Rôle du repo
+
+Ce RAG sert à **améliorer en continu le prompting** d'agents vocaux : docs LiveKit, guides OpenAI Realtime, Vapi, Hamming, Anthropic, etc. Les chunks récents portent des tags `category` et `architecture` pour filtrer les recherches selon le type de pipeline (cascadé STT→LLM→TTS vs speech-to-speech).
+
+### Schéma de métadonnées (payload Qdrant)
+
+| Champ | Valeurs | Description |
+|-------|---------|-------------|
+| `source_type` | `docs`, `forum`, `vapi_book`, `livekit_prompting`, `openai_realtime`, `vapi_prompting`, `hamming_identity`, `anthropic_tools`, … | Origine du document (extensible) |
+| `category` | `prompting`, `infra` | Type de contenu (prompting = guides de prompts ; infra = déploiement, plateforme) |
+| `architecture` | `cascaded`, `s2s`, `both` | Pipeline visé ; `both` matche les filtres `cascaded` et `s2s` |
+
+Les ~10k points legacy n'ont pas encore `category`/`architecture` — seuls les nouveaux chunks ingérés sont filtrables par ces champs.
+
+### Sources prompting curatées (5)
+
+| URL | source_type | architecture |
+|-----|-------------|--------------|
+| docs.livekit.io/agents/start/prompting.md | `livekit_prompting` | both |
+| developers.openai.com/.../realtime_prompting_guide | `openai_realtime` | s2s |
+| docs.vapi.ai/prompting-guide.md | `vapi_prompting` | both |
+| hamming.ai/.../voice-agent-caller-identity-testing-checklist | `hamming_identity` | both |
+| anthropic.com/engineering/writing-tools-for-agents | `anthropic_tools` | both |
+
+Ingestion en une commande :
+
+```bash
+curl -X POST https://livekit-rag-production.up.railway.app/ingest/prompting
+```
 
 ## Setup local
 
@@ -39,7 +69,25 @@ curl -X POST https://livekit-rag-production.up.railway.app/ingest \
   }'
 ```
 
-`source_type` : `docs` | `forum` | `vapi_book`
+`source_type` : libre (ex. `docs`, `forum`, `vapi_book`, `livekit_prompting`, …)
+
+Champs optionnels : `category`, `architecture`, `fetch_mode` (`auto`, `markdown`, `jina`, `html`).
+
+Corps étendu (métadonnées par URL) :
+
+```bash
+curl -X POST https://livekit-rag-production.up.railway.app/ingest \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sources": [{
+      "url": "https://docs.livekit.io/agents/start/prompting.md",
+      "source_type": "livekit_prompting",
+      "category": "prompting",
+      "architecture": "both",
+      "fetch_mode": "markdown"
+    }]
+  }'
+```
 
 Réponse attendue :
 
@@ -89,9 +137,11 @@ call = {
     "params": {
         "name": "search_livekit_kb",
         "arguments": {
-            "query": "How do I detect turns?",
+            "query": "How should I write the system prompt for turn detection?",
             "top_k": 5,
-            "source_type": "docs"
+            "category": "prompting",
+            "architecture": "s2s",
+            "source_type": "openai_realtime"
         },
     },
 }
