@@ -119,7 +119,7 @@ def fetch_and_parse_url(url: str) -> tuple[str, str]:
             script.decompose()
         
         # Get title
-        title = soup.title.string if soup.title else urlparse(url).netloc
+        title = str(soup.title.string) if soup.title and soup.title.string else urlparse(url).netloc
         
         # Get text
         text = soup.get_text(separator="\n", strip=True)
