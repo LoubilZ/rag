@@ -186,15 +186,13 @@ def search_livekit_kb(
             )
 
         # 3. Vector search
-        query_response = qdrant.query_points(
+        search_results = qdrant.search(
             collection_name=COLLECTION_NAME,
-            query=query_embedding,
+            query_vector=query_embedding,
             limit=30,
             query_filter=search_filter,
             with_payload=True,
-            with_vectors=False,
         )
-        search_results = query_response.points
 
         if not search_results:
             return []
