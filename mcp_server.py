@@ -185,14 +185,25 @@ def search_livekit_kb(
                 must=[FieldCondition(key="source_type", match=MatchValue(value=source_type))]
             )
 
-        # 3. Vector search
-        search_results = qdrant.search(
-            collection_name=COLLECTION_NAME,
-            query_vector=query_embedding,
-            limit=30,
-            query_filter=search_filter,
-            with_payload=True,
-        )
+        # 3. Vector search (support both old and new qdrant-client APIs)
+        if hasattr(qdrant, "query_points"):
+            query_response = qdrant.query_points(
+                collection_name=COLLECTION_NAME,
+                query=query_embedding,
+                limit=30,
+                query_filter=search_filter,
+                with_payload=True,
+                with_vectors=False,
+            )
+            search_results = query_response.points
+        else:
+            search_results = qdrant.search(
+                collection_name=COLLECTION_NAME,
+                query_vector=query_embedding,
+                limit=30,
+                query_filter=search_filter,
+                with_payload=True,
+            )
 
         if not search_results:
             return []
