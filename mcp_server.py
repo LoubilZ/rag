@@ -30,6 +30,7 @@ VOYAGE_API_KEY = os.getenv("VOYAGE_API_KEY")
 COHERE_API_KEY = os.getenv("COHERE_API_KEY")
 QDRANT_PATH = str(SCRIPT_DIR / "qdrant_storage")
 COLLECTION_NAME = "livekit_kb"
+VECTOR_SIZE = 512
 PORT = int(os.getenv("PORT", "8080"))
 
 # Initialize MCP server
@@ -67,6 +68,28 @@ def get_cohere_client():
             raise ValueError("COHERE_API_KEY environment variable not set")
         _cohere_client = cohere.ClientV2(api_key=COHERE_API_KEY)
     return _cohere_client
+
+
+def ensure_collection(qdrant: QdrantClient) -> None:
+    """Create or recreate the collection with the expected vector size."""
+    try:
+        info = qdrant.get_collection(COLLECTION_NAME)
+        current_size = info.config.params.vectors.size
+        if current_size != VECTOR_SIZE:
+            print(
+                f"[ingest] Recreating collection (was {current_size}d, need {VECTOR_SIZE}d)",
+                flush=True,
+            )
+            qdrant.delete_collection(COLLECTION_NAME)
+            qdrant.create_collection(
+                collection_name=COLLECTION_NAME,
+                vectors_config={"size": VECTOR_SIZE, "distance": "Cosine"},
+            )
+    except Exception:
+        qdrant.create_collection(
+            collection_name=COLLECTION_NAME,
+            vectors_config={"size": VECTOR_SIZE, "distance": "Cosine"},
+        )
 
 
 def chunk_text(text: str, chunk_size: int = 500, overlap: int = 100) -> list[str]:
@@ -221,7 +244,7 @@ def livekit_kb_stats() -> dict:
                 "collection": COLLECTION_NAME,
                 "points_count": info.points_count,
                 "status": "ready",
-                "vector_size": 512,
+                "vector_size": VECTOR_SIZE,
             }
         except Exception:
             return {
@@ -260,15 +283,7 @@ async def ingest_urls(request: Request) -> JSONResponse:
         qdrant = get_qdrant_client()
         voyage = get_voyage_client()
         
-        # Create collection if it doesn't exist
-        try:
-            qdrant.get_collection(COLLECTION_NAME)
-        except:
-            qdrant.create_collection(
-                collection_name=COLLECTION_NAME,
-                vectors_config={"size": 512, "distance": "Cosine"}
-            )
-        
+        ensure_collection(qdrant)
         ingested_count = 0
         errors = []
         
