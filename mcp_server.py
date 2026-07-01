@@ -266,7 +266,7 @@ async def ingest_urls(request: Request) -> JSONResponse:
         except:
             qdrant.create_collection(
                 collection_name=COLLECTION_NAME,
-                vectors_config={"size": 1024, "distance": "Cosine"}
+                vectors_config={"size": 512, "distance": "Cosine"}
             )
         
         ingested_count = 0
