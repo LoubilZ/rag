@@ -28,6 +28,7 @@ COMMUNITY_KB = (
 
 ROOT = Path(__file__).resolve().parents[1]
 URLS_FILE = ROOT / "data" / "livekit_doc_urls.txt"
+FORUM_URLS_FILE = ROOT / "data" / "livekit_forum_urls.txt"
 
 
 def fetch_livekit_urls() -> list[str]:
@@ -57,6 +58,14 @@ def source(url: str, source_type: str, category: str, architecture: str = "both"
     }
 
 
+def load_forum_urls() -> list[str]:
+    if not FORUM_URLS_FILE.exists():
+        raise FileNotFoundError(
+            f"Missing {FORUM_URLS_FILE}. Run: python3 scripts/extract_forum_urls.py"
+        )
+    return [line.strip() for line in FORUM_URLS_FILE.read_text().splitlines() if line.strip()]
+
+
 def post_ingest(base: str, sources: list[dict], timeout: int = 600) -> dict:
     resp = requests.post(
         f"{base.rstrip('/')}/ingest",
@@ -80,14 +89,17 @@ def main() -> int:
     parser.add_argument("--livekit-docs", action="store_true")
     parser.add_argument("--vapi-book", action="store_true")
     parser.add_argument("--community-kb", action="store_true")
+    parser.add_argument("--forum", action="store_true", help="Ingest community.livekit.io threads")
     parser.add_argument("--all", action="store_true")
     args = parser.parse_args()
 
     if args.all:
         args.livekit_docs = args.vapi_book = args.community_kb = True
 
-    if not (args.livekit_docs or args.vapi_book or args.community_kb):
-        parser.error("Pick at least one of --livekit-docs, --vapi-book, --community-kb, or --all")
+    if not (args.livekit_docs or args.vapi_book or args.community_kb or args.forum):
+        parser.error(
+            "Pick at least one of --livekit-docs, --vapi-book, --community-kb, --forum, or --all"
+        )
 
     sources: list[dict] = []
 
@@ -107,6 +119,10 @@ def main() -> int:
         sources.extend(
             source(u, "docs", "infra") for u in fetch_livekit_urls()
         )
+    if args.forum:
+        sources.extend(
+            source(u, "forum", "infra") for u in load_forum_urls()
+        )
 
     total_ingested = 0
     total_batches = (len(sources) + args.batch_size - 1) // args.batch_size
@@ -121,6 +137,14 @@ def main() -> int:
             print(f"  -> +{count} chunks", result.get("errors"), flush=True)
         except Exception as exc:
             print(f"  !! batch failed: {exc}", file=sys.stderr, flush=True)
+            time.sleep(5)
+            try:
+                result = post_ingest(args.base, batch, timeout=900)
+                count = result.get("ingested_count", 0)
+                total_ingested += count
+                print(f"  -> retry +{count} chunks", result.get("errors"), flush=True)
+            except Exception as exc2:
+                print(f"  !! retry failed: {exc2}", file=sys.stderr, flush=True)
         if i < total_batches:
             time.sleep(args.sleep)
 
